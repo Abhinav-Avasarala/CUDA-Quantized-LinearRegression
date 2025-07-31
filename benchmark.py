@@ -6,6 +6,8 @@ from qc_ext import quantize as quant_cuda
 def old_quant(v, scale):
     return torch.round(v/scale) * scale
 
+num_bits = 8
+
 # Benchmark helper
 def benchmark(fn, *args, runs=100):
     torch.cuda.synchronize()
@@ -20,4 +22,4 @@ if __name__ == "__main__":
     x = torch.randn(5000, 10000, device=device)
     scale = (x.max() - x.min()) / (2**16 - 1 + 1e-8)
     benchmark(old_quant, x, scale)
-    benchmark(quant_cuda, x, float(scale))
+    benchmark(quant_cuda, x, float(scale), num_bits)

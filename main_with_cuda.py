@@ -6,7 +6,7 @@ torch.manual_seed(0)
 device        = "cuda" if torch.cuda.is_available() else "cpu"
 max_iter      = 20
 lr            = 1e-5
-num_bits      = 16
+num_bits      = 8
 eps           = 1e-8
 
 # ─── Problem setup ───────────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ x0 = torch.randn(10000,   device=device)
 def fake_grad_resid_reuse(W, b, Wxx, bits):
     resid = Wxx - b
     scale = (resid.max() - resid.min()) / (2**bits - 1 + eps)
-    qres  = quantize(resid, float(scale))
+    qres = quantize(resid, float(scale), num_bits)
     return 2 * W.t().mv(qres)
 
 
@@ -26,13 +26,13 @@ def fake_grad_resid_naive(W, b, xx, bits):
     Ax    = W @ xx
     resid = Ax - b
     scale = (resid.max() - resid.min()) / (2**bits - 1 + eps)
-    qres  = quantize(resid, float(scale))
+    qres = quantize(resid, float(scale), num_bits)
     return 2 * W.t().mv(qres)
 
 
 def fake_grad_input(W, b, xx, bits):
     scale = (xx.max() - xx.min()) / (2**bits - 1 + eps)
-    qx    = quantize(xx, float(scale))
+    qx = quantize(xx, float(scale), num_bits)
     return 2 * W.t().mv(W @ qx - b)
 
 # ─── Initialize all trajectories ────────────────────────────────────────────────
@@ -62,7 +62,7 @@ for t in range(1, max_iter+1):
     # — 1) Quant-accumulation —
     delta           = x_oracle_next - x_accum
     scale_d         = (delta.max() - delta.min()) / (2**num_bits - 1 + eps)
-    qdelta          = quantize(delta, float(scale_d))
+    qdelta          = quantize(delta, float(scale_d), num_bits)
     x_accum_next    = x_accum + qdelta
     W_x_accum_next  = W_x_accum + W @ qdelta
 
