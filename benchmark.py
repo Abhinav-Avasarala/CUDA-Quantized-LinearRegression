@@ -1,25 +1,32 @@
-import time
 import torch
-from qc_ext import quantize as quant_cuda
+import time
+import qc_ext  # your compiled extension name
 
-# Original Python quantize
-def old_quant(v, scale):
-    return torch.round(v/scale) * scale
+device = "cuda"
 
-num_bits = 8
+N = 10_000_000
+x = torch.randn(N, device=device)
+scale = 0.1
 
-# Benchmark helper
-def benchmark(fn, *args, runs=100):
+bit_widths = [2, 4, 8, 16, 32]
+
+print("=== Float-based quantization ===")
+for bits in bit_widths:
     torch.cuda.synchronize()
-    start = time.time()
-    for _ in range(runs):
-        _ = fn(*args)
+    t0 = time.time()
+    out = qc_ext.quantize(x, scale, bits)
     torch.cuda.synchronize()
-    print(f"{fn.__name__}: {time.time() - start:.4f}s over {runs} runs")
+    print(f"{bits}-bit float-sim: {time.time() - t0:.6f}s")
 
-if __name__ == "__main__":
-    device = "cuda"
-    x = torch.randn(5000, 10000, device=device)
-    scale = (x.max() - x.min()) / (2**16 - 1 + 1e-8)
-    benchmark(old_quant, x, scale)
-    benchmark(quant_cuda, x, float(scale), num_bits)
+print("\n=== Packed quantization ===")
+for bits in bit_widths:
+    torch.cuda.synchronize()
+    t0 = time.time()
+    packed = qc_ext.quantize_packed(x, scale, bits)
+    torch.cuda.synchronize()
+    print(f"{bits}-bit packed: {time.time() - t0:.6f}s")
+
+    # Optional: verify correctness
+    unpacked = qc_ext.unpack_packed(packed, scale, bits, N)
+    max_err = (unpacked - x).abs().max().item()
+    print(f"   max abs error: {max_err}")
