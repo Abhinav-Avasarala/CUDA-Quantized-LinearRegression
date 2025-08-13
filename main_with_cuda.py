@@ -1,11 +1,12 @@
 import torch
+import qc_ext
 
 # ─── Settings & reproducibility ──────────────────────────────────────────────────
 torch.manual_seed(0)
 device        = "cuda" if torch.cuda.is_available() else "cpu"
 max_iter      = 40
 # lr            = 1e-7
-num_bits      = 3
+num_bits      = 4
 eps           = 1e-8
 
 
@@ -33,7 +34,15 @@ print(f"Estimated σ_max(W)={sigma_max:.3e}, setting lr={lr:.3e}")
 
 # ─── Quantizer ───────────────────────────────────────────────────────────────────
 def quantize(v, scale):
-    return torch.round(v/scale) * scale
+    bits = int(num_bits)
+    if bits not in (2, 4, 8, 16, 32):
+        # graceful fallback if someone sets an unsupported bit-width
+        return torch.round(v/scale) * scale
+
+    v_c = v.contiguous()
+    packed  = qc_ext.quantize_packed(v_c, float(scale), bits)
+    unpacked = qc_ext.unpack_packed(packed, float(scale), bits, v_c.numel())
+    return unpacked.view_as(v_c)
 
 # ─── Fake-grad variants ───────────────────────────────────────────────────────────
 def fake_grad_resid_reuse(W, b, Wxx, bits):
